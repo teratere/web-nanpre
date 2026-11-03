@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>洗練された数独 (Sudoku)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Canvas Confetti for Clear Celebration -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap');
+    
+    * {
+      font-family: 'Inter', 'M PLUS Rounded 1c', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    /* 数独ボードの太線グリッド */
+    .sudoku-cell {
+      aspect-ratio: 1 / 1;
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      transition: background-color 0.15s ease, transform 0.05s ease;
+    }
+
+    /* 3x3ブロックの境界線（太線） */
+    .cell-c-2, .cell-c-5 {
+      border-right: 2.5px solid #475569 !important;
+    }
+    .cell-r-2, .cell-r-5 {
+      border-bottom: 2.5px solid #475569 !important;
+    }
+
+    /* メモ用3x3ミニグリッド */
+    .notes-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      width: 100%;
+      height: 100%;
+      padding: 2px;
+      pointer-events: none;
+    }
+    .note-digit {
+      font-size: clamp(8px, 1.8vw, 11px);
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    /* アニメーション用 */
+    @keyframes popIn {
+      0% { transform: scale(0.7); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .pop-anim {
+      animation: popIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col justify-between items-center py-4 px-2 sm:px-4">
+
+  <!-- ヘッダーエリア -->
+  <header class="w-full max-w-md flex items-center justify-between px-2 mb-2">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
+        <span>SUDOKU</span>
+        <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">数独</span>
+      </h1>
+      <p class="text-xs text-slate-500 font-medium">ロジックと集中力の数字パズル</p>
+    </div>
+    
+    <div class="flex items-center gap-2">
+      <button id="btn-theme-help" onclick="toggleHelpModal(true)" title="遊び方" class="p-2.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition active:scale-95">
+        <i class="fa-solid fa-circle-question text-lg"></i>
+      </button>
+      <button id="btn-restart" onclick="restartCurrentGame()" title="やり直す" class="p-2.5 rounded-xl bg-white shadow-sm border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-slate-50 transition active:scale-95">
+        <i class="fa-solid fa-arrow-rotate-left text-lg"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- 難易度 & タイマーバー -->
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200/80 p-3 mb-3">
+    <div class="flex items-center justify-between gap-2">
+      <!-- 難易度セレクト -->
+      <div class="relative inline-block text-left">
+        <select id="diff-select" onchange="startNewGame(this.value)" class="bg-slate-100 text-slate-700 font-bold text-xs sm:text-sm py-1.5 px-3 rounded-lg border border-slate-200 hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition cursor-pointer">
+          <option value="easy">初級 (Easy)</option>
+          <option value="medium" selected>中級 (Medium)</option>
+          <option value="hard">上級 (Hard)</option>
+          <option value="expert">達人 (Expert)</option>
+        </select>
+      </div>
+
+      <!-- タイマー & 一時停止 -->
+      <div class="flex items-center gap-2 font-mono text-slate-700 font-bold bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+        <i class="fa-regular fa-clock text-slate-400 text-xs"></i>
+        <span id="timer-display" class="text-sm">00:00</span>
+        <button id="pause-btn" onclick="togglePause()" class="text-slate-500 hover:text-indigo-600 ml-1 transition">
+          <i id="pause-icon" class="fa-solid fa-pause text-xs"></i>
+        </button>
+      </div>
+
+      <!-- ミス回数カウンター -->
+      <div class="text-xs font-semibold px-2.5 py-1.5 bg-rose-50 text-rose-600 rounded-lg border border-rose-100 flex items-center gap-1">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>ミス:</span>
+        <span id="mistake-count" class="font-bold">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ゲーム盤コンテナ -->
+  <main class="w-full max-w-md relative flex flex-col items-center">
+    <!-- ポーズ中のオーバーレイ -->
+    <div id="pause-overlay" class="absolute inset-0 bg-slate-900/70 backdrop-blur-sm z-30 rounded-2xl hidden flex-col items-center justify-center text-white">
+      <i class="fa-solid fa-circle-pause text-5xl mb-3 text-indigo-400"></i>
+      <h3 class="text-xl font-bold tracking-wider mb-4">一時停止中</h3>
+      <button onclick="togglePause()" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 flex items-center gap-2">
+        <i class="fa-solid fa-play"></i> 再開する
+      </button>
+    </div>
+
+    <!-- 9x9 ボード本体 -->
+    <div id="board" class="w-full bg-white rounded-2xl shadow-md border-[2.5px] border-slate-700 grid grid-cols-9 overflow-hidden transition-all duration-200">
+      <!-- セルはJavaScriptで動的生成 -->
+    </div>
+
+    <!-- コントロールアクションバー（消しゴム、メモ、アンドゥ、ヒント） -->
+    <div class="w-full grid grid-cols-4 gap-2 mt-3 px-1">
+      <button id="btn-undo" onclick="handleUndo()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 active:scale-95 transition text-slate-700">
+        <i class="fa-solid fa-rotate-left text-base sm:text-lg mb-0.5 text-slate-600"></i>
+        <span class="text-[11px] font-bold">戻す</span>
+      </button>
+
+      <button id="btn-erase" onclick="handleErase()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 active:scale-95 transition text-slate-700">
+        <i class="fa-solid fa-eraser text-base sm:text-lg mb-0.5 text-slate-600"></i>
+        <span class="text-[11px] font-bold">消去</span>
+      </button>
+
+      <button id="btn-note" onclick="toggleNoteMode()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 active:scale-95 transition text-slate-700 relative">
+        <i class="fa-solid fa-pencil text-base sm:text-lg mb-0.5 text-slate-600"></i>
+        <span class="text-[11px] font-bold">メモ</span>
+        <span id="note-badge" class="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-slate-300"></span>
+      </button>
+
+      <button id="btn-hint" onclick="giveHint()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-white border border-slate-200 shadow-sm hover:bg-amber-50 hover:border-amber-200 active:scale-95 transition text-amber-600 relative">
+        <i class="fa-regular fa-lightbulb text-base sm:text-lg mb-0.5"></i>
+        <span class="text-[11px] font-bold">ヒント (<span id="hint-count">3</span>)</span>
+      </button>
+    </div>
+
+    <!-- 数字入力キーパッド (1-9) -->
+    <div class="w-full grid grid-cols-9 gap-1 sm:gap-1.5 mt-3 px-0.5">
+      <!-- 1から9までの数字ボタン -->
+      <script>
+        for (let i = 1; i <= 9; i++) {
+          document.write(`
+            <button onclick="handleNumberInput(${i})" id="key-num-${i}" class="num-key h-12 sm:h-14 bg-white border border-slate-200 shadow-sm rounded-xl font-bold text-lg sm:text-xl text-indigo-700 hover:bg-indigo-50 active:bg-indigo-100 active:scale-95 transition flex flex-col items-center justify-center relative">
+              <span>${i}</span>
+              <span id="count-remain-${i}" class="text-[9px] text-slate-400 font-semibold -mt-1">9</span>
+            </button>
+          `);
+        }
+      </script>
+    </div>
+  </main>
+
+  <!-- クリア祝賀モーダル -->
+  <div id="clear-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl border border-slate-100 transform transition-all scale-95 pop-anim">
+      <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-inner">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+      <h2 class="text-2xl font-black text-slate-800 mb-1">お見事！クリア！</h2>
+      <p class="text-xs text-slate-500 mb-5">すべてのマスを正しく埋めることができました！</p>
+
+      <div class="bg-slate-50 rounded-2xl p-4 mb-6 border border-slate-100 grid grid-cols-2 gap-3 text-left">
+        <div>
+          <span class="text-[11px] font-semibold text-slate-400 block">難易度</span>
+          <span id="result-diff" class="font-bold text-slate-700 text-sm">中級</span>
+        </div>
+        <div>
+          <span class="text-[11px] font-semibold text-slate-400 block">クリアタイム</span>
+          <span id="result-time" class="font-bold text-indigo-600 text-sm">00:00</span>
+        </div>
+        <div>
+          <span class="text-[11px] font-semibold text-slate-400 block">ミス回数</span>
+          <span id="result-mistakes" class="font-bold text-slate-700 text-sm">0 回</span>
+        </div>
+        <div>
+          <span class="text-[11px] font-semibold text-slate-400 block">使用ヒント</span>
+          <span id="result-hints" class="font-bold text-slate-700 text-sm">0 回</span>
+        </div>
+      </div>
+
+      <button onclick="startNewGame(document.getElementById('diff-select').value); toggleClearModal(false);" class="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition active:scale-98">
+        次のパズルに挑戦する
+      </button>
+    </div>
+  </div>
+
+  <!-- ルール & 遊び方モーダル -->
+  <div id="help-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-6 text-slate-800 shadow-2xl border border-slate-100">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-book-open text-indigo-600"></i> 数独のルールと遊び方
+        </h3>
+        <button onclick="toggleHelpModal(false)" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="space-y-3 text-xs sm:text-sm text-slate-600 leading-relaxed max-h-80 overflow-y-auto pr-1">
+        <div class="p-3 bg-slate-50 rounded-xl">
+          <p class="font-bold text-slate-800 mb-1">基本ルール</p>
+          <ul class="list-disc list-inside space-y-1">
+            <li>各行（ヨコ9マス）に1から9までの数字が1つずつ入ります。</li>
+            <li>各列（タテ9マス）に1から9までの数字が1つずつ入ります。</li>
+            <li>太線で囲まれた3×3のブロックにも1から9までの数字が1つずつ入ります。</li>
+          </ul>
+        </div>
+        <div class="p-3 bg-slate-50 rounded-xl">
+          <p class="font-bold text-slate-800 mb-1">便利機能</p>
+          <ul class="list-disc list-inside space-y-1">
+            <li><strong>メモ (鉛筆)</strong>: 候補となる数字を複数記録できます。</li>
+            <li><strong>戻す</strong>: 間違えた直前の手を元に戻せます。</li>
+            <li><strong>キーボード操作</strong>: PCの場合は矢印キーで移動、1〜9キーで数字入力、Backspace/Deleteで消去できます。</li>
+          </ul>
+        </div>
+      </div>
+      <button onclick="toggleHelpModal(false)" class="w-full mt-5 py-3 bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 rounded-xl transition">
+        閉じる
+      </button>
+    </div>
+  </div>
+
+  <!-- フッター -->
+  <footer class="mt-4 text-center text-xs text-slate-400">
+    <p>キーボード入力対応 (1-9, 矢印キー, Delete, Mでメモ切替)</p>
+  </footer>
+
+  <script>
+    /* =====================================================================
+       数独生成 & 解法ロジック (バックトラッキング & 正当性保証)
+       ===================================================================== */
+    class SudokuGenerator {
+      // 9x9の空盤面
+      static createEmptyGrid() {
+        return Array.from({ length: 9 }, () => Array(9).fill(0));
+      }
+
+      // 数字を配置できるかチェック
+      static isValid(grid, row, col, num) {
+        for (let i = 0; i < 9; i++) {
+          if (grid[row][i] === num && i !== col) return false;
+          if (grid[i][col] === num && i !== row) return false;
+        }
+        const startRow = Math.floor(row / 3) * 3;
+        const startCol = Math.floor(col / 3) * 3;
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < 3; c++) {
+            const checkR = startRow + r;
+            const checkC = startCol + c;
+            if (grid[checkR][checkC] === num && (checkR !== row || checkC !== col)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+
+      // 完全な正解盤面をランダム生成
+      static fillGrid(grid) {
+        const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        for (let r = 0; r < 9; r++) {
+          for (let c = 0; c < 9; c++) {
+            if (grid[r][c] === 0) {
+              const shuffled = [...numbers].sort(() => Math.random() - 0.5);
+              for (const num of shuffled) {
+                if (this.isValid(grid, r, c, num)) {
+                  grid[r][c] = num;
+                  if (this.fillGrid(grid)) return true;
+                  grid[r][c] = 0;
+                }
+              }
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+
+      // 難易度に応じた空白（穴埋め）作成
+      static generatePuzzle(difficulty = 'medium') {
+        const fullGrid = this.createEmptyGrid();
+        this.fillGrid(fullGrid);
+
+        // クローン
+        const puzzle = fullGrid.map(row => [...row]);
+
+        // 難易度別の空白数
+        let holes = 32;
+        if (difficulty === 'easy') holes = 30;
+        else if (difficulty === 'medium') holes = 42;
+        else if (difficulty === 'hard') holes = 50;
+        else if (difficulty === 'expert') holes = 56;
+
+        const positions = [];
+        for (let r = 0; r < 9; r++) {
+          for (let c = 0; c < 9; c++) {
+            positions.push({ r, c });
+          }
+        }
+        positions.sort(() => Math.random() - 0.5);
+
+        let removed = 0;
+        for (const pos of positions) {
+          if (removed >= holes) break;
+          puzzle[pos.r][pos.c] = 0;
+          removed++;
+        }
+
+        return { puzzle, solution: fullGrid };
+      }
+    }
+
+    /* =====================================================================
+       ゲーム状態管理
+       ===================================================================== */
+    const state = {
+      initialBoard: [],
+      currentBoard: [],
+      solutionBoard: [],
+      notes: Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set())),
+      history: [],
+      selectedCell: { r: -1, c: -1 },
+      noteMode: false,
+      mistakes: 0,
+      hintsUsed: 0,
+      hintsRemaining: 3,
+      timer: 0,
+      timerInterval: null,
+      isPaused: false,
+      isFinished: false,
+      difficulty: 'medium'
+    };
+
+    /* =====================================================================
+       DOM 要素
+       ===================================================================== */
+    const boardEl = document.getElementById('board');
+    const timerDisplay = document.getElementById('timer-display');
+    const mistakeCountEl = document.getElementById('mistake-count');
+    const noteBadgeEl = document.getElementById('note-badge');
+    const btnNoteEl = document.getElementById('btn-note');
+    const hintCountEl = document.getElementById('hint-count');
+    const pauseOverlay = document.getElementById('pause-overlay');
+    const pauseIcon = document.getElementById('pause-icon');
+
+    /* =====================================================================
+       盤面の初期描画・レンダリング
+       ===================================================================== */
+    function initializeBoardDOM() {
+      boardEl.innerHTML = '';
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const cell = document.createElement('div');
+          cell.className = `sudoku-cell cell-r-${r} cell-c-${c}`;
+          cell.dataset.r = r;
+          cell.dataset.c = c;
+
+          // メモ表示用領域
+          const notesGrid = document.createElement('div');
+          notesGrid.className = 'notes-grid hidden';
+          for (let n = 1; n <= 9; n++) {
+            const noteDigit = document.createElement('span');
+            noteDigit.className = `note-digit note-${n}`;
+            noteDigit.textContent = '';
+            notesGrid.appendChild(noteDigit);
+          }
+          cell.appendChild(notesGrid);
+
+          // メイン数字表示領域
+          const valueSpan = document.createElement('span');
+          valueSpan.className = 'val-span text-lg sm:text-2xl font-bold';
+          cell.appendChild(valueSpan);
+
+          // セル選択クリック
+          cell.addEventListener('click', () => selectCell(r, c));
+
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+
+    // 新規ゲーム開始
+    function startNewGame(difficulty = 'medium') {
+      state.difficulty = difficulty;
+      const { puzzle, solution } = SudokuGenerator.generatePuzzle(difficulty);
+      state.initialBoard = puzzle.map(row => [...row]);
+      state.currentBoard = puzzle.map(row => [...row]);
+      state.solutionBoard = solution;
+      state.notes = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+      state.history = [];
+      state.selectedCell = { r: -1, c: -1 };
+      state.mistakes = 0;
+      state.hintsUsed = 0;
+      state.hintsRemaining = 3;
+      state.isFinished = false;
+      state.isPaused = false;
+      mistakeCountEl.textContent = '0';
+      hintCountEl.textContent = state.hintsRemaining;
+
+      // タイマーリセット
+      resetTimer();
+      startTimer();
+      pauseOverlay.classList.add('hidden');
+      pauseIcon.className = 'fa-solid fa-pause text-xs';
+
+      renderBoard();
+      updateRemainingNumbers();
+    }
+
+    // 現在の盤面を初期状態にやり直し
+    function restartCurrentGame() {
+      state.currentBoard = state.initialBoard.map(row => [...row]);
+      state.notes = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+      state.history = [];
+      state.selectedCell = { r: -1, c: -1 };
+      state.mistakes = 0;
+      mistakeCountEl.textContent = '0';
+      resetTimer();
+      startTimer();
+      renderBoard();
+      updateRemainingNumbers();
+    }
+
+    // 画面の再描画
+    function renderBoard() {
+      const { r: selR, c: selC } = state.selectedCell;
+      const selectedVal = (selR >= 0 && selC >= 0) ? state.currentBoard[selR][selC] : null;
+
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const cell = boardEl.children[r * 9 + c];
+          const val = state.currentBoard[r][c];
+          const isInitial = state.initialBoard[r][c] !== 0;
+          const isSelected = r === selR && c === selC;
+          const isSameRowColBox = (selR >= 0 && selC >= 0) && (
+            r === selR || c === selC || 
+            (Math.floor(r / 3) === Math.floor(selR / 3) && Math.floor(c / 3) === Math.floor(selC / 3))
+          );
+          const isSameNumber = val !== 0 && selectedVal !== null && val === selectedVal;
+          const isError = val !== 0 && !isInitial && val !== state.solutionBoard[r][c];
+
+          // 背景色ロジック
+          cell.className = `sudoku-cell cell-r-${r} cell-c-${c}`;
+          if (isSelected) {
+            cell.classList.add('bg-indigo-200');
+          } else if (isSameNumber) {
+            cell.classList.add('bg-indigo-100/90');
+          } else if (isSameRowColBox) {
+            cell.classList.add('bg-slate-100/90');
+          } else {
+            cell.classList.add('bg-white');
+          }
+
+          const valSpan = cell.querySelector('.val-span');
+          const notesGrid = cell.querySelector('.notes-grid');
+
+          if (val !== 0) {
+            notesGrid.classList.add('hidden');
+            valSpan.classList.remove('hidden');
+            valSpan.textContent = val;
+
+            // 数字の色
+            if (isError) {
+              valSpan.className = 'val-span text-lg sm:text-2xl font-black text-rose-500 pop-anim';
+            } else if (isInitial) {
+              valSpan.className = 'val-span text-lg sm:text-2xl font-black text-slate-800';
+            } else {
+              valSpan.className = 'val-span text-lg sm:text-2xl font-bold text-indigo-600';
+            }
+          } else {
+            valSpan.classList.add('hidden');
+            valSpan.textContent = '';
+            
+            // メモ表示
+            const cellNotes = state.notes[r][c];
+            if (cellNotes && cellNotes.size > 0) {
+              notesGrid.classList.remove('hidden');
+              for (let n = 1; n <= 9; n++) {
+                const noteEl = notesGrid.querySelector(`.note-${n}`);
+                noteEl.textContent = cellNotes.has(n) ? n : '';
+              }
+            } else {
+              notesGrid.classList.add('hidden');
+            }
+          }
+        }
+      }
+    }
+
+    // 残り数字のカウント更新
+    function updateRemainingNumbers() {
+      const counts = Array(10).fill(0);
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const val = state.currentBoard[r][c];
+          if (val >= 1 && val <= 9) counts[val]++;
+        }
+      }
+
+      for (let num = 1; num <= 9; num++) {
+        const remain = 9 - counts[num];
+        const countSpan = document.getElementById(`count-remain-${num}`);
+        const keyBtn = document.getElementById(`key-num-${num}`);
+        if (countSpan && keyBtn) {
+          countSpan.textContent = remain > 0 ? remain : '✓';
+          if (remain <= 0) {
+            keyBtn.classList.add('opacity-30', 'pointer-events-none');
+          } else {
+            keyBtn.classList.remove('opacity-30', 'pointer-events-none');
+          }
+        }
+      }
+    }
+
+    /* =====================================================================
+       操作インタラクション
+       ===================================================================== */
+    function selectCell(r, c) {
+      if (state.isPaused || state.isFinished) return;
+      state.selectedCell = { r, c };
+      renderBoard();
+    }
+
+    // 数字入力処理
+    function handleNumberInput(num) {
+      if (state.isPaused || state.isFinished) return;
+      const { r, c } = state.selectedCell;
+      if (r < 0 || c < 0) return;
+
+      // 初期配置のセルは変更不可
+      if (state.initialBoard[r][c] !== 0) return;
+
+      if (state.noteMode) {
+        // メモモード
+        const cellNotes = state.notes[r][c];
+        saveHistory();
+        if (cellNotes.has(num)) {
+          cellNotes.delete(num);
+        } else {
+          cellNotes.add(num);
+        }
+        renderBoard();
+      } else {
+        // 通常入力モード
+        if (state.currentBoard[r][c] === num) return; // 既に同じなら何もしない
+
+        saveHistory();
+        state.currentBoard[r][c] = num;
+        state.notes[r][c].clear(); // 数字が入ったらメモをクリア
+
+        // 誤答チェック
+        if (num !== state.solutionBoard[r][c]) {
+          state.mistakes++;
+          mistakeCountEl.textContent = state.mistakes;
+        } else {
+          // 正解時：同じ行・列・ブロック内のその数字のメモを自動除去
+          clearNotesForSolved(r, c, num);
+        }
+
+        renderBoard();
+        updateRemainingNumbers();
+        checkCompletion();
+      }
+    }
+
+    // 正解時に該当ブロック等のメモを除去
+    function clearNotesForSolved(r, c, num) {
+      const boxStartR = Math.floor(r / 3) * 3;
+      const boxStartC = Math.floor(c / 3) * 3;
+      for (let i = 0; i < 9; i++) {
+        state.notes[r][i].delete(num);
+        state.notes[i][c].delete(num);
+      }
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+          state.notes[boxStartR + row][boxStartC + col].delete(num);
+        }
+      }
+    }
+
+    // 消去
+    function handleErase() {
+      if (state.isPaused || state.isFinished) return;
+      const { r, c } = state.selectedCell;
+      if (r < 0 || c < 0) return;
+      if (state.initialBoard[r][c] !== 0) return;
+
+      if (state.currentBoard[r][c] !== 0 || state.notes[r][c].size > 0) {
+        saveHistory();
+        state.currentBoard[r][c] = 0;
+        state.notes[r][c].clear();
+        renderBoard();
+        updateRemainingNumbers();
+      }
+    }
+
+    // アンドゥ（履歴保存と復元）
+    function saveHistory() {
+      // 直前15手まで保存
+      if (state.history.length > 20) state.history.shift();
+      state.history.push({
+        board: state.currentBoard.map(row => [...row]),
+        notes: state.notes.map(row => row.map(set => new Set(set)))
+      });
+    }
+
+    function handleUndo() {
+      if (state.isPaused || state.isFinished || state.history.length === 0) return;
+      const prevState = state.history.pop();
+      state.currentBoard = prevState.board;
+      state.notes = prevState.notes;
+      renderBoard();
+      updateRemainingNumbers();
+    }
+
+    // メモモード切り替え
+    function toggleNoteMode() {
+      state.noteMode = !state.noteMode;
+      if (state.noteMode) {
+        btnNoteEl.classList.add('bg-indigo-50', 'border-indigo-400', 'text-indigo-600');
+        noteBadgeEl.classList.remove('bg-slate-300');
+        noteBadgeEl.classList.add('bg-indigo-600');
+      } else {
+        btnNoteEl.classList.remove('bg-indigo-50', 'border-indigo-400', 'text-indigo-600');
+        noteBadgeEl.classList.remove('bg-indigo-600');
+        noteBadgeEl.classList.add('bg-slate-300');
+      }
+    }
+
+    // ヒント機能
+    function giveHint() {
+      if (state.isPaused || state.isFinished) return;
+      if (state.hintsRemaining <= 0) {
+        return;
+      }
+
+      const { r, c } = state.selectedCell;
+      let targetR = r;
+      let targetC = c;
+
+      // 選択中のマスが埋まっているか、未選択なら空マスを探す
+      if (targetR < 0 || targetC < 0 || state.currentBoard[targetR][targetC] !== 0) {
+        const emptyCells = [];
+        for (let row = 0; row < 9; row++) {
+          for (let col = 0; col < 9; col++) {
+            if (state.currentBoard[row][col] === 0) {
+              emptyCells.push({ r: row, c: col });
+            }
+          }
+        }
+        if (emptyCells.length === 0) return;
+        const randomEmpty = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+        targetR = randomEmpty.r;
+        targetC = randomEmpty.c;
+      }
+
+      saveHistory();
+      const correctVal = state.solutionBoard[targetR][targetC];
+      state.currentBoard[targetR][targetC] = correctVal;
+      state.notes[targetR][targetC].clear();
+      clearNotesForSolved(targetR, targetC, correctVal);
+
+      state.hintsRemaining--;
+      state.hintsUsed++;
+      hintCountEl.textContent = state.hintsRemaining;
+      state.selectedCell = { r: targetR, c: targetC };
+
+      renderBoard();
+      updateRemainingNumbers();
+      checkCompletion();
+    }
+
+    // ゲーム完了判定
+    function checkCompletion() {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (state.currentBoard[r][c] !== state.solutionBoard[r][c]) {
+            return false;
+          }
+        }
+      }
+
+      // クリア成功！
+      state.isFinished = true;
+      clearInterval(state.timerInterval);
+
+      // 紙吹雪エフェクト
+      triggerConfetti();
+
+      // クリアモーダル表示
+      const diffMap = { easy: '初級', medium: '中級', hard: '上級', expert: '達人' };
+      document.getElementById('result-diff').textContent = diffMap[state.difficulty];
+      document.getElementById('result-time').textContent = formatTime(state.timer);
+      document.getElementById('result-mistakes').textContent = `${state.mistakes} 回`;
+      document.getElementById('result-hints').textContent = `${state.hintsUsed} 回`;
+      toggleClearModal(true);
+      return true;
+    }
+
+    function triggerConfetti() {
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      } catch (e) {
+        // confetti fallback
+      }
+    }
+
+    /* =====================================================================
+       タイマー
+       ===================================================================== */
+    function startTimer() {
+      clearInterval(state.timerInterval);
+      state.timerInterval = setInterval(() => {
+        if (!state.isPaused && !state.isFinished) {
+          state.timer++;
+          timerDisplay.textContent = formatTime(state.timer);
+        }
+      }, 1000);
+    }
+
+    function resetTimer() {
+      clearInterval(state.timerInterval);
+      state.timer = 0;
+      timerDisplay.textContent = '00:00';
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = (seconds % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function togglePause() {
+      if (state.isFinished) return;
+      state.isPaused = !state.isPaused;
+      if (state.isPaused) {
+        pauseOverlay.classList.remove('hidden');
+        pauseOverlay.classList.add('flex');
+        pauseIcon.className = 'fa-solid fa-play text-xs';
+      } else {
+        pauseOverlay.classList.add('hidden');
+        pauseOverlay.classList.remove('flex');
+        pauseIcon.className = 'fa-solid fa-pause text-xs';
+      }
+    }
+
+    /* =====================================================================
+       モーダルハンドラ
+       ===================================================================== */
+    function toggleClearModal(show) {
+      const modal = document.getElementById('clear-modal');
+      modal.classList.toggle('hidden', !show);
+      modal.classList.toggle('flex', show);
+    }
+
+    function toggleHelpModal(show) {
+      const modal = document.getElementById('help-modal');
+      modal.classList.toggle('hidden', !show);
+      modal.classList.toggle('flex', show);
+    }
+
+    /* =====================================================================
+       キーボード操作サポート
+       ===================================================================== */
+    window.addEventListener('keydown', (e) => {
+      if (state.isFinished || state.isPaused) return;
+
+      // 矢印キー移動
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        let { r, c } = state.selectedCell;
+        if (r === -1 || c === -1) {
+          selectCell(4, 4);
+          return;
+        }
+        if (e.key === 'ArrowUp') r = Math.max(0, r - 1);
+        if (e.key === 'ArrowDown') r = Math.min(8, r + 1);
+        if (e.key === 'ArrowLeft') c = Math.max(0, c - 1);
+        if (e.key === 'ArrowRight') c = Math.min(8, c + 1);
+        selectCell(r, c);
+        return;
+      }
+
+      // 数字入力 (1-9)
+      if (e.key >= '1' && e.key <= '9') {
+        handleNumberInput(parseInt(e.key, 10));
+        return;
+      }
+
+      // 消去 (Backspace, Delete, 0)
+      if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+        handleErase();
+        return;
+      }
+
+      // メモモード切り替え (Mキー or Nキー)
+      if (e.key === 'm' || e.key === 'M' || e.key === 'n' || e.key === 'N') {
+        toggleNoteMode();
+        return;
+      }
+
+      // アンドゥ (Ctrl+Z or Z)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        handleUndo();
+      }
+    });
+
+    /* =====================================================================
+       初期化実行
+       ===================================================================== */
+    window.onload = function() {
+      initializeBoardDOM();
+      startNewGame('medium');
+    };
+  </script>
+</body>
+</html>
