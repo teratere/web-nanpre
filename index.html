@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>洗練された数独 (Sudoku)</title>
+  <title>洗練されたナンプレ (Number Place)</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Icons -->
@@ -21,7 +21,7 @@
       touch-action: manipulation;
     }
 
-    /* 数独ボードの太線グリッド */
+    /* ナンプレボードの太線グリッド */
     .sudoku-cell {
       aspect-ratio: 1 / 1;
       border-right: 1px solid #e2e8f0;
@@ -79,7 +79,7 @@
     <div>
       <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
         <span>SUDOKU</span>
-        <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">数独</span>
+        <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">ナンプレ</span>
       </h1>
       <p class="text-xs text-slate-500 font-medium">ロジックと集中力の数字パズル</p>
     </div>
@@ -220,7 +220,7 @@
     <div class="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-6 text-slate-800 shadow-2xl border border-slate-100">
       <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
         <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-          <i class="fa-solid fa-book-open text-indigo-600"></i> 数独のルールと遊び方
+          <i class="fa-solid fa-book-open text-indigo-600"></i> ナンプレのルールと遊び方
         </h3>
         <button onclick="toggleHelpModal(false)" class="text-slate-400 hover:text-slate-600 p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
@@ -257,7 +257,7 @@
 
   <script>
     /* =====================================================================
-       数独生成 & 解法ロジック (バックトラッキング & 正当性保証)
+       ナンプレ生成 & 解法ロジック (バックトラッキング & 正当性保証)
        ===================================================================== */
     class SudokuGenerator {
       // 9x9の空盤面
